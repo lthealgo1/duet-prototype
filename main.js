@@ -4,6 +4,7 @@ const fs = require('fs')
 const dotenv = require('dotenv');
 const { Octokit } = require("octokit");
 dotenv.config();
+const axios = require("axios")
 
 const appId = process.env.APP_ID;
 const webhookSecret = process.env.WEBHOOK_SECRET;
@@ -25,6 +26,17 @@ const app = express();
 const octokit = new Octokit ({
   auth: oauth
 })
+
+async function fetchFiles(urls) {
+  try {
+    const responses = await Promise.all(urls.map(url => axios.get(url))); // Fetch all URLs at once
+    // const contents = responses.map(res => res.data); // Extract content
+    const contents = responses.map(file => file.data);
+    return contents;
+  } catch (error) {
+    console.error("Error fetching files:", error.message);
+  }
+}
 
 // Handler for AWS Lambda. 
 
@@ -67,10 +79,29 @@ app.post('/webhook', express.json({type: 'application/json'}), (request, respons
     //console.log(response.data);
     const data = response.data;
     const fileNames = data.map(file => file.name); 
-    console.log(fileNames)
-    const fileURLs = data.map(file => file.download_url)
-    console.log(fileURLs)
+    const fileURLs = data.map(file => file.download_url);
+
     // download using urls comes next
+    async function getContents() {
+      contents = await fetchFiles(fileURLs);
+      const fileObjects = fileNames.map((filename, index) => ({
+      filename,
+      data: contents[index]
+
+      }));
+      const fileData = {
+        header: {
+          name: `Repo: ${repo}`,
+          time_created: new Date().toISOString(),
+          event_type: githubEvent
+
+        },
+        files: fileObjects
+      }
+      console.log(fileData)
+      return fileData
+    }
+    getContents()
     })
 
     // console.log(issue_url);
@@ -107,10 +138,28 @@ app.post('/webhook', express.json({type: 'application/json'}), (request, respons
     //console.log(response.data);
     const data = response.data;
     const fileNames = data.map(file => file.name); 
-    console.log(fileNames)
     const fileURLs = data.map(file => file.download_url)
-    console.log(fileURLs)
     // download using urls comes next
+    async function getContents() {
+      contents = await fetchFiles(fileURLs);
+      const fileObjects = fileNames.map((filename, index) => ({
+      filename,
+      data: contents[index]
+
+      }));
+      const fileData = {
+        header: {
+          name: `Repo: ${repo}`,
+          time_created: new Date().toISOString(),
+          event_type: githubEvent
+
+        },
+        files: fileObjects
+      }
+      console.log(fileData)
+      return fileData
+    }
+    getContents()
     })
     // will be needed for -> repo_code = api_get_request(push_url)... this function is not finished yet
 
@@ -151,11 +200,32 @@ app.post('/webhook', express.json({type: 'application/json'}), (request, respons
       // const {content, download_url} = response.data;
     //console.log(response.data);
     const data = response.data;
+    console.log(data)
     const fileNames = data.map(file => file.name); 
     console.log(fileNames)
     const fileURLs = data.map(file => file.download_url)
     console.log(fileURLs)
     // download using urls comes next
+    async function getContents() {
+      contents = await fetchFiles(fileURLs);
+      const fileObjects = fileNames.map((filename, index) => ({
+      filename,
+      data: contents[index]
+
+      }));
+      const fileData = {
+        header: {
+          name: `Repo: ${repo}`,
+          time_created: new Date().toISOString(),
+          event_type: githubEvent
+
+        },
+        files: fileObjects
+      }
+      console.log(fileData)
+      return fileData
+    }
+    getContents()  
     })
 
 
@@ -196,6 +266,26 @@ app.post('/webhook', express.json({type: 'application/json'}), (request, respons
     const fileURLs = data.map(file => file.download_url)
     console.log(fileURLs)
     // download using urls comes next
+    async function getContents() {
+      contents = await fetchFiles(fileURLs);
+      const fileObjects = fileNames.map((filename, index) => ({
+      filename,
+      data: contents[index]
+
+      }));
+      const fileData = {
+        header: {
+          name: `Repo: ${repo}`,
+          time_created: new Date().toISOString(),
+          event_type: githubEvent
+
+        },
+        files: fileObjects
+      }
+      console.log(fileData)
+      return fileData
+    }
+    getContents()
     })
 
 
@@ -203,8 +293,63 @@ app.post('/webhook', express.json({type: 'application/json'}), (request, respons
     // api_get_request function in separate file will also need a Personal Access token and a Github actions token - will be located in .gitignore
     // once repo_code is returned, db_api called to store the code in a table / sent straight to script with Anthropic plugin.
   }
+  else if (githubEvent === 'create') {
+    const data = request.body;
+    const author = data.sender.login; 
+    const created_repo = data.repository.name;
+    const ref = data.ref;
+    const branch = data.master_branch;
+
+    console.log(`A creation with reference ${ref} was made by ${author} from repo ${created_repo} branch ${branch}.`)
+
+    const owner = data.repository.owner.login;
+    const repo = data.repository.name;
+    const path = data.repository.full_name;
+    octokit.request('GET /repos/{owner}/{repo}/contents/{path}', {
+      owner: owner,
+      repo: repo,
+      path: '',
+      headers: {
+        "Accept": "application/vnd.github.v3.raw+json",
+        'X-GitHub-Api-Version': '2022-11-28'
+    }})
+    .then(response => {
+
+      // const {content, download_url} = response.data;
+    //console.log(response.data);
+    const data = response.data;
+    console.log(data)
+    const fileNames = data.map(file => file.name); 
+    console.log(fileNames)
+    const fileURLs = data.map(file => file.download_url)
+    console.log(fileURLs)
+    // download using urls comes next
+    async function getContents() {
+      contents = await fetchFiles(fileURLs);
+      const fileObjects = fileNames.map((filename, index) => ({
+      filename,
+      data: contents[index]
+
+      }));
+      const fileData = {
+        header: {
+          name: `Repo: ${repo}`,
+          time_created: new Date().toISOString(),
+          event_type: githubEvent
+
+        },
+        files: fileObjects
+      }
+      console.log(fileData)
+      return fileData
+    }
+    getContents()
+    })
+
+  }
 
   else {
+    response.status(400).send('Bad request');
     console.log(`Unhandled event: ${githubEvent}`);
     const data = request.body;
     console.log(data);
